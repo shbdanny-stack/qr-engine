@@ -10,9 +10,38 @@
   <!-- Load your engine from GitHub -->
   <script src="https://raw.githubusercontent.com/shbdanny-stack/qr-engine/main/engine.js"></script>
 </head>
+<button id="testButton">Run Supabase Test</button>
+<script>
+  document.getElementById("testButton").addEventListener("click", async () => {
+    console.log("Running Supabase test...");
+
+    const { data: insertData, error: insertError } = await supabase
+      .from("test_table")
+      .insert([{ message: "Hello from your live site!" }]);
+
+    if (insertError) {
+      console.error("Insert error:", insertError);
+      return;
+    }
+
+    console.log("Insert success:", insertData);
+
+    const { data: readData, error: readError } = await supabase
+      .from("test_table")
+      .select("*");
+
+    if (readError) {
+      console.error("Read error:", readError);
+      return;
+    }
+
+    console.log("Read success:", readData);
+  });
+</script>
 
 <body>
   <h1>Shiny Happy Engine Loaded</h1>
   <p>If you see this, the page is working. The engine will run in the background.</p>
+  
 </body>
 </html>
