@@ -4,10 +4,9 @@
   <meta charset="UTF-8" />
   <title>Shiny Happy Engine</title>
 
-  <!-- Load Supabase library FIRST -->
+  <!-- Load Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Initialize Supabase client -->
   <script>
     const SUPABASE_URL = "https://wowdmkxuwysuihgoklki.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_nlHqvZhnjR3PO-HsqgY2qw_aCw2yF4Y";
@@ -15,7 +14,7 @@
     const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   </script>
 
-  <!-- Load your engine AFTER Supabase is ready -->
+  <!-- Load Engine -->
   <script src="https://raw.githubusercontent.com/shbdanny-stack/qr-engine/main/engine.js"></script>
 
   <style>
@@ -44,7 +43,6 @@
 
 <body>
 
-  <!-- Identity Box -->
   <div id="identityBox">
     <h3>Enter your ShinySide ID</h3>
     <input id="ssidInput" placeholder="ShinySide ID" />
@@ -65,14 +63,21 @@
   <script>
     let currentUser = null;
 
-    // Check if user already saved locally
-    window.addEventListener("load", async () => {
-      const savedUser = localStorage.getItem("shiny_user");
-      if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        document.getElementById("identityStatus").innerText =
-          "Welcome back, " + currentUser.shiny_side_id + "!";
-        document.getElementById("identityBox").style.display = "none";
+    // Load saved user
+    window.addEventListener("load", () => {
+      try {
+        const saved = localStorage.getItem("shiny_user");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.shiny_side_id) {
+            currentUser = parsed;
+            document.getElementById("identityStatus").innerText =
+              "Welcome back, " + currentUser.shiny_side_id + "!";
+            document.getElementById("identityBox").style.display = "none";
+          }
+        }
+      } catch (e) {
+        localStorage.removeItem("shiny_user");
       }
     });
 
@@ -81,21 +86,17 @@
       const ssid = document.getElementById("ssidInput").value.trim();
       if (!ssid) return;
 
-      // Check if user exists
-      const { data: users, error } = await client
+      // Look up user
+      const { data: user, error } = await client
         .from("users")
         .select("*")
         .eq("shiny_side_id", ssid)
-        .limit(1);
+        .single();
 
-      if (users && users.length > 0) {
-        const user = users[0];
-
+      if (user) {
         if (user.claimed) {
-          // Ask for email
           document.getElementById("emailClaimBox").style.display = "block";
         } else {
-          // Temporary user — log them in
           currentUser = user;
           localStorage.setItem("shiny_user", JSON.stringify(user));
           document.getElementById("identityStatus").innerText =
@@ -103,36 +104,40 @@
           document.getElementById("identityBox").style.display = "none";
         }
       } else {
-        // Create temporary user
+        // Create new user
         const { data: newUser, error: insertErr } = await client
           .from("users")
           .insert([{ shiny_side_id: ssid, claimed: false }])
           .select()
           .single();
 
-        currentUser = newUser;
-        localStorage.setItem("shiny_user", JSON.stringify(newUser));
-        document.getElementById("identityStatus").innerText =
-          "Welcome, " + ssid + "!";
-        document.getElementById("identityBox").style.display = "none";
+        if (newUser) {
+          currentUser = newUser;
+          localStorage.setItem("shiny_user", JSON.stringify(newUser));
+          document.getElementById("identityStatus").innerText =
+            "Welcome, " + ssid + "!";
+          document.getElementById("identityBox").style.display = "none";
+        } else {
+          alert("Error creating user.");
+        }
       }
     });
 
-    // Handle email verification for claimed users
+    // Handle email verification
     document.getElementById("emailSubmit").addEventListener("click", async () => {
       const ssid = document.getElementById("ssidInput").value.trim();
       const email = document.getElementById("emailInput").value.trim();
 
-      const { data: users, error } = await client
+      const { data: user, error } = await client
         .from("users")
         .select("*")
         .eq("shiny_side_id", ssid)
         .eq("email", email)
-        .limit(1);
+        .single();
 
-      if (users && users.length > 0) {
-        currentUser = users[0];
-        localStorage.setItem("shiny_user", JSON.stringify(currentUser));
+      if (user) {
+        currentUser = user;
+        localStorage.setItem("shiny_user", JSON.stringify(user));
         document.getElementById("identityStatus").innerText =
           "Welcome back, " + ssid + "!";
         document.getElementById("identityBox").style.display = "none";
