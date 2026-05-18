@@ -581,7 +581,49 @@
         "Welcome, " + (user.shiny_side_id || "ShinySide guest") + "!";
     }
 
-    window.addEventListener("load", () => {
+    // --- MAGIC LINK + AUTO-LOGIN BOOTSTRAP ---
+    async function bootstrapAuth() {
+      // 1) If Supabase has a session, use it first (cross-device magic link)
+      try {
+        const { data: sessionData } = await client.auth.getSession();
+        if (sessionData && sessionData.session && sessionData.session.user) {
+          const email = sessionData.session.user.email;
+
+          const { data: users } = await client
+            .from("users")
+            .select("*")
+            .eq("email", email)
+            .limit(1);
+
+          let user = users && users[0];
+
+          // If no user yet, create one from email prefix
+          if (!user) {
+            const baseId = email.split("@")[0];
+            const { data: newUsers } = await client
+              .from("users")
+              .insert([
+                {
+                  shiny_side_id: baseId,
+                  name: baseId,
+                  email: email,
+                  claimed: true
+                }
+              ])
+              .select("*");
+            user = newUsers && newUsers[0];
+          }
+
+          if (user) {
+            showQuestBoardFor(user);
+            return; // Session-based auto-login wins
+          }
+        }
+      } catch (e) {
+        console.error("Auth bootstrap error:", e);
+      }
+
+      // 2) Fallback: localStorage-based auto-login (same device)
       try {
         const saved = localStorage.getItem("shiny_user");
         if (saved) {
@@ -593,8 +635,11 @@
       } catch (e) {
         localStorage.removeItem("shiny_user");
       }
-    });
+    }
 
+    window.addEventListener("load", bootstrapAuth);
+
+    // --- Identity entry (ShinySide ID) ---
     document.getElementById("ssidSubmit").addEventListener("click", async () => {
       const ssid = document.getElementById("ssidInput").value.trim();
       if (!ssid) return;
@@ -656,7 +701,7 @@
       }
     });
 
-    // My Score modal
+    // --- My Score modal ---
     const scoreBackdrop = document.getElementById("scoreModalBackdrop");
     const scoreTotal = document.getElementById("scoreTotal");
     const scoreHistory = document.getElementById("scoreHistory");
@@ -721,7 +766,7 @@
       scoreBackdrop.style.display = "none";
     });
 
-    // Leaderboard helpers
+    // --- Leaderboard helpers ---
     function startOfTodayISO() {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
@@ -815,7 +860,7 @@
         .join("");
     }
 
-    // Leaderboard modal wiring
+    // --- Leaderboard modal wiring ---
     const leaderboardBackdrop = document.getElementById("leaderboardModalBackdrop");
     const leaderboardTabs = document.querySelectorAll(".leaderboard-tab");
 
@@ -843,7 +888,7 @@
       leaderboardBackdrop.style.display = "none";
     });
 
-    // Finish visit flow
+    // --- Finish visit flow + MAGIC LINK SEND ---
     const finishBackdrop = document.getElementById("finishModalBackdrop");
     const finishEmailInput = document.getElementById("finishEmailInput");
 
@@ -869,6 +914,7 @@
         return;
       }
 
+      // 1) Update user record with email + claimed
       const { data, error } = await client
         .from("users")
         .update({ email: email, claimed: true })
@@ -883,12 +929,26 @@
 
       currentUser = data[0];
       localStorage.setItem("shiny_user", JSON.stringify(currentUser));
-      finishBackdrop.style.display = "none";
-      document.getElementById("identityStatus").textContent =
-        "Points saved. See you next time, " + (currentUser.shiny_side_id || "friend") + ".";
+
+      // 2) Send magic link that comes back to THIS page
+      try {
+        await client.auth.signInWithOtp({
+          email: email,
+          options: {
+            emailRedirectTo: "https://shbdanny-stack.github.io/qr-engine/experience.html"
+          }
+        });
+
+        finishBackdrop.style.display = "none";
+        document.getElementById("identityStatus").textContent =
+          "Magic link sent! Tap it to lock in your points and auto‑login next time.";
+      } catch (e) {
+        console.error("Magic link error:", e);
+        alert("We saved your email, but could not send a magic link right now.");
+      }
     });
 
-    // Close modals on backdrop click
+    // --- Close modals on backdrop click ---
     finishBackdrop.addEventListener("click", (e) => {
       if (e.target === finishBackdrop) {
         finishBackdrop.style.display = "none";
