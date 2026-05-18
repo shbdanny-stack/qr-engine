@@ -14,9 +14,6 @@
     const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   </script>
 
-  <!-- Load Engine -->
-  <script src="https://raw.githubusercontent.com/shbdanny-stack/qr-engine/main/engine.js"></script>
-
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -86,7 +83,7 @@
       const ssid = document.getElementById("ssidInput").value.trim();
       if (!ssid) return;
 
-      // Try to fetch user WITHOUT .single() (so 406 doesn't break flow)
+      // Fetch user without .single() to avoid 406 breaking flow
       const { data: users, error } = await client
         .from("users")
         .select("*")
@@ -95,7 +92,6 @@
       const user = users && users.length > 0 ? users[0] : null;
 
       if (user) {
-        // Existing user
         if (user.claimed) {
           document.getElementById("emailClaimBox").style.display = "block";
         } else {
@@ -107,13 +103,13 @@
         }
       } else {
         // Create new user
-        const { data: newUser, error: insertErr } = await client
+        const { data: newUsers, error: insertErr } = await client
           .from("users")
           .insert([
             {
               shiny_side_id: ssid,
-              name: ssid,       // required
-              claimed: false    // default
+              name: ssid,
+              claimed: false
             }
           ])
           .select("*");
@@ -124,7 +120,13 @@
           return;
         }
 
-        currentUser = newUser[0];
+        const newUser = newUsers && newUsers[0] ? newUsers[0] : null;
+        if (!newUser) {
+          alert("Error creating user.");
+          return;
+        }
+
+        currentUser = newUser;
         localStorage.setItem("shiny_user", JSON.stringify(currentUser));
         document.getElementById("identityStatus").innerText =
           "Welcome, " + ssid + "!";
@@ -157,6 +159,9 @@
       }
     });
   </script>
+
+  <!-- Load Engine LAST so it doesn't stomp identity UI -->
+  <script src="https://raw.githubusercontent.com/shbdanny-stack/qr-engine/main/engine.js"></script>
 
 </body>
 </html>
