@@ -104,10 +104,14 @@
           document.getElementById("identityBox").style.display = "none";
         }
       } else {
-        // Create new user (OBJECT, not array)
+        // Create new user (OBJECT, not array) + include name
         const { data: newUser, error: insertErr } = await client
           .from("users")
-          .insert({ shiny_side_id: ssid, claimed: false })
+          .insert({
+            shiny_side_id: ssid,
+            claimed: false,
+            name: ssid   // ⭐ REQUIRED FIX
+          })
           .select()
           .single();
 
