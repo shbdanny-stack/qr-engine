@@ -581,7 +581,6 @@
         "Welcome, " + (user.shiny_side_id || "ShinySide guest") + "!";
     }
 
-    window.addEventListener("load", () => {
     // --- MAGIC LINK + AUTO-LOGIN BOOTSTRAP ---
     async function bootstrapAuth() {
       // 1) If Supabase has a session, use it first (cross-device magic link)
@@ -628,11 +627,14 @@
       try {
         const saved = localStorage.getItem("shiny_user");
         if (saved) {
-@@ -593,8 +635,11 @@
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.shiny_side_id) {
+            showQuestBoardFor(parsed);
+          }
+        }
       } catch (e) {
         localStorage.removeItem("shiny_user");
       }
-    });
     }
 
     window.addEventListener("load", bootstrapAuth);
@@ -641,43 +643,274 @@
     document.getElementById("ssidSubmit").addEventListener("click", async () => {
       const ssid = document.getElementById("ssidInput").value.trim();
       if (!ssid) return;
-@@ -656,7 +701,7 @@
+
+      const { data: users, error } = await client
+        .from("users")
+        .select("*")
+        .eq("shiny_side_id", ssid);
+
+      const user = users && users.length > 0 ? users[0] : null;
+
+      if (user) {
+        if (user.claimed) {
+          document.getElementById("emailClaimBox").style.display = "block";
+          document.getElementById("identityStatus").textContent =
+            "This ShinySide ID is claimed. Verify with email to continue.";
+        } else {
+          showQuestBoardFor(user);
+        }
+      } else {
+        const { data: newUsers, error: insertErr } = await client
+          .from("users")
+          .insert([
+            {
+              shiny_side_id: ssid,
+              name: ssid,
+              claimed: false
+            }
+          ])
+          .select("*");
+
+        if (insertErr || !newUsers || !newUsers[0]) {
+          console.error("Insert error:", insertErr);
+          alert("Error creating user.");
+          return;
+        }
+
+        showQuestBoardFor(newUsers[0]);
       }
     });
 
-    // My Score modal
+    document.getElementById("emailSubmit").addEventListener("click", async () => {
+      const ssid = document.getElementById("ssidInput").value.trim();
+      const email = document.getElementById("emailInput").value.trim();
+      if (!ssid || !email) return;
+
+      const { data: users, error } = await client
+        .from("users")
+        .select("*")
+        .eq("shiny_side_id", ssid)
+        .eq("email", email);
+
+      const user = users && users.length > 0 ? users[0] : null;
+
+      if (user) {
+        showQuestBoardFor(user);
+      } else {
+        alert("Email does not match this ShinySide ID.");
+      }
+    });
+
     // --- My Score modal ---
     const scoreBackdrop = document.getElementById("scoreModalBackdrop");
     const scoreTotal = document.getElementById("scoreTotal");
     const scoreHistory = document.getElementById("scoreHistory");
-@@ -721,7 +766,7 @@
+
+    document.getElementById("myScoreBtn").addEventListener("click", async () => {
+      if (!currentUser) {
+        alert("We don’t have a user loaded yet.");
+        return;
+      }
+
+      scoreBackdrop.style.display = "flex";
+      scoreTotal.textContent = "Loading…";
+      scoreHistory.textContent = "Loading history…";
+
+      const { data: totalRows, error: totalErr } = await client
+        .from("scores")
+        .select("points")
+        .eq("user_id", currentUser.id);
+
+      if (totalErr) {
+        console.error(totalErr);
+        scoreTotal.textContent = "Error loading score";
+      } else {
+        const total = totalRows.reduce((sum, row) => sum + (row.points || 0), 0);
+        scoreTotal.textContent = `${total} points`;
+      }
+
+      const { data: historyRows, error: histErr } = await client
+        .from("scores")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .order("created", { ascending: false })
+        .limit(20);
+
+      if (histErr) {
+        console.error(histErr);
+        scoreHistory.textContent = "Error loading history";
+        return;
+      }
+
+      if (!historyRows || historyRows.length === 0) {
+        scoreHistory.textContent = "No points yet — go scan something!";
+        return;
+      }
+
+      scoreHistory.innerHTML = historyRows
+        .map(
+          (row) => `
+            <div style="margin-bottom:8px;">
+              <strong>${row.points} pts</strong>
+              <div style="font-size:12px;opacity:0.7;">
+                ${row.source_type || "unknown"} → ${row.source_id || "n/a"}<br>
+                ${row.created ? new Date(row.created).toLocaleString() : ""}
+              </div>
+            </div>
+          `
+        )
+        .join("");
+    });
+
+    document.getElementById("scoreCloseBtn").addEventListener("click", () => {
       scoreBackdrop.style.display = "none";
     });
 
-    // Leaderboard helpers
     // --- Leaderboard helpers ---
     function startOfTodayISO() {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
-@@ -815,7 +860,7 @@
+      return d.toISOString();
+    }
+
+    function startOfWeekISO() {
+      const d = new Date();
+      const day = d.getDay(); // 0 = Sunday
+      const diff = d.getDate() - day + 1; // Monday as start
+      d.setDate(diff);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString();
+    }
+
+    async function loadLeaderboard(range) {
+      const content = document.getElementById("leaderboardContent");
+      content.textContent = "Loading leaderboard…";
+
+      let query = client.from("scores").select("user_id, points, created");
+
+      if (range === "today") {
+        query = query.gte("created", startOfTodayISO());
+      } else if (range === "week") {
+        query = query.gte("created", startOfWeekISO());
+      }
+
+      const { data: scoreRows, error: scoreErr } = await query;
+
+      if (scoreErr) {
+        console.error(scoreErr);
+        content.textContent = "Error loading leaderboard.";
+        return;
+      }
+
+      if (!scoreRows || scoreRows.length === 0) {
+        content.textContent = "No points yet in this timeframe.";
+        return;
+      }
+
+      const totalsByUser = {};
+      scoreRows.forEach((row) => {
+        if (!row.user_id) return;
+        if (!totalsByUser[row.user_id]) totalsByUser[row.user_id] = 0;
+        totalsByUser[row.user_id] += row.points || 0;
+      });
+
+      const userIds = Object.keys(totalsByUser);
+      if (userIds.length === 0) {
+        content.textContent = "No points yet in this timeframe.";
+        return;
+      }
+
+      const { data: users, error: usersErr } = await client
+        .from("users")
+        .select("id, shiny_side_id")
+        .in("id", userIds);
+
+      if (usersErr) {
+        console.error(usersErr);
+      }
+
+      const nameById = {};
+      (users || []).forEach((u) => {
+        nameById[u.id] = u.shiny_side_id || u.id.slice(0, 8);
+      });
+
+      const rows = userIds
+        .map((id) => ({
+          user_id: id,
+          name: nameById[id] || id.slice(0, 8),
+          points: totalsByUser[id]
+        }))
+        .sort((a, b) => b.points - a.points)
+        .slice(0, 20);
+
+      content.innerHTML = rows
+        .map(
+          (row, index) => `
+          <div class="leaderboard-row">
+            <div>
+              <span class="leaderboard-name">${index + 1}. ${row.name}</span>
+              <div class="leaderboard-meta">
+                ${row.user_id.slice(0, 8)}…
+              </div>
+            </div>
+            <div class="leaderboard-points">${row.points} pts</div>
+          </div>
+        `
+        )
         .join("");
     }
 
-    // Leaderboard modal wiring
     // --- Leaderboard modal wiring ---
     const leaderboardBackdrop = document.getElementById("leaderboardModalBackdrop");
     const leaderboardTabs = document.querySelectorAll(".leaderboard-tab");
 
-@@ -843,7 +888,7 @@
+    document.getElementById("leaderboardBtn").addEventListener("click", async () => {
+      leaderboardBackdrop.style.display = "flex";
+      leaderboardTabs.forEach((tab) => {
+        tab.classList.remove("active");
+        if (tab.getAttribute("data-range") === "today") {
+          tab.classList.add("active");
+        }
+      });
+      await loadLeaderboard("today");
+    });
+
+    leaderboardTabs.forEach((tab) => {
+      tab.addEventListener("click", async () => {
+        leaderboardTabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        const range = tab.getAttribute("data-range");
+        await loadLeaderboard(range);
+      });
+    });
+
+    document.getElementById("leaderboardCloseBtn").addEventListener("click", () => {
       leaderboardBackdrop.style.display = "none";
     });
 
-    // Finish visit flow
     // --- Finish visit flow + MAGIC LINK SEND ---
     const finishBackdrop = document.getElementById("finishModalBackdrop");
     const finishEmailInput = document.getElementById("finishEmailInput");
 
-@@ -869,6 +914,7 @@
+    document.getElementById("finishVisitBtn").addEventListener("click", () => {
+      if (!currentUser) {
+        alert("We don’t have a user loaded yet.");
+        return;
+      }
+      finishEmailInput.value = currentUser.email || "";
+      finishBackdrop.style.display = "flex";
+      finishEmailInput.focus();
+    });
+
+    document.getElementById("finishCancelBtn").addEventListener("click", () => {
+      finishBackdrop.style.display = "none";
+    });
+
+    document.getElementById("finishConfirmBtn").addEventListener("click", async () => {
+      if (!currentUser) return;
+      const email = finishEmailInput.value.trim();
+      if (!email) {
+        alert("Add an email to save your points.");
         return;
       }
 
@@ -685,13 +918,17 @@
       const { data, error } = await client
         .from("users")
         .update({ email: email, claimed: true })
-@@ -883,31 +929,45 @@
+        .eq("id", currentUser.id)
+        .select("*");
+
+      if (error || !data || !data[0]) {
+        console.error("Update error:", error);
+        alert("Could not save your email. Try again in a moment.");
+        return;
+      }
 
       currentUser = data[0];
       localStorage.setItem("shiny_user", JSON.stringify(currentUser));
-      finishBackdrop.style.display = "none";
-      document.getElementById("identityStatus").textContent =
-        "Points saved. See you next time, " + (currentUser.shiny_side_id || "friend") + ".";
 
       // 2) Send magic link that comes back to THIS page
       try {
@@ -711,7 +948,6 @@
       }
     });
 
-    // Close modals on backdrop click
     // --- Close modals on backdrop click ---
     finishBackdrop.addEventListener("click", (e) => {
       if (e.target === finishBackdrop) {
