@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <title>Returning to Shiny Happy</title>
+
+  <!-- Mobile viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+
+  <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const client = supabase.createClient(
@@ -15,7 +20,7 @@
       const { data, error } = await client.auth.getSession();
 
       if (error || !data.session) {
-        document.body.innerHTML = "<h2>Login failed. Try again.</h2>";
+        document.getElementById("status").textContent = "Login failed. Try again.";
         return;
       }
 
@@ -32,12 +37,13 @@
 
       // 3. If no user exists yet, create one
       if (!user) {
+        const base = email.split("@")[0];
         const { data: newUsers } = await client
           .from("users")
           .insert([
             {
-              shiny_side_id: email.split("@")[0],
-              name: email.split("@")[0],
+              shiny_side_id: base,
+              name: base,
               email: email,
               claimed: true
             }
@@ -56,8 +62,53 @@
 
     window.onload = handleReturn;
   </script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      background: #000;
+      color: #fff;
+      font-family: "Baloo 2", sans-serif;
+    }
+
+    body {
+      padding: 40px 20px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 26px;
+      color: #01a9ce;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 30px 16px;
+      }
+
+      h2 {
+        font-size: 22px;
+      }
+    }
+  </style>
 </head>
-<body style="background:black;color:white;font-family:sans-serif;padding:40px;">
-  <h2>Logging you in…</h2>
+
+<body>
+  <h2 id="status">Logging you in…</h2>
 </body>
 </html>
