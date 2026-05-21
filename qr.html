@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <title>Shiny Happy QR</title>
 
+  <!-- Mobile viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
@@ -13,17 +16,32 @@
   </script>
 
   <style>
-    body {
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
       margin: 0;
-      padding: 40px;
+      padding: 0;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
       background: #000;
       color: #fff;
       font-family: "Baloo 2", sans-serif;
+    }
+
+    body {
+      padding: 32px 20px;
       text-align: center;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .card {
-      margin: 0 auto;
+      width: 100%;
       max-width: 360px;
       padding: 24px;
       border-radius: 18px;
@@ -34,7 +52,21 @@
 
     h2 {
       margin-top: 0;
+      margin-bottom: 12px;
       color: #01a9ce;
+      font-size: 24px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    p {
+      margin: 0;
+      margin-bottom: 16px;
+      font-size: 16px;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.85);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
 
     .btn {
@@ -47,6 +79,27 @@
       border: none;
       cursor: pointer;
       box-shadow: 0 0 14px rgba(1,169,206,0.7);
+      width: 100%;
+      max-width: 100%;
+      font-size: 16px;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 20px 14px;
+      }
+
+      .card {
+        padding: 20px 16px;
+      }
+
+      h2 {
+        font-size: 22px;
+      }
+
+      p {
+        font-size: 15px;
+      }
     }
   </style>
 </head>
